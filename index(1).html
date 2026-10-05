@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loja</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--fundo:#FBF7FA;--texto:#2A1633;--destaque:#B4235A;--suave:#7A6A82;--linha:#E8DCE6}
+*{box-sizing:border-box;margin:0}
+body{background:var(--fundo);color:var(--texto);font-family:Figtree,system-ui,sans-serif;line-height:1.5}
+header{padding:2.5rem 1.25rem 1.25rem;max-width:1100px;margin:auto}
+h1{font-family:Fraunces,serif;font-weight:700;font-size:clamp(2rem,6vw,3.4rem);line-height:1.05;letter-spacing:-.02em}
+header p{color:var(--suave);margin-top:.5rem;max-width:34rem}
+.barra{max-width:1100px;margin:auto;padding:0 1.25rem 1rem;display:flex;flex-wrap:wrap;gap:.6rem;align-items:center}
+input[type=search]{flex:1 1 220px;padding:.7rem 1rem;border:1px solid var(--linha);border-radius:999px;background:#fff;font:inherit;color:inherit}
+input[type=search]:focus-visible,button:focus-visible,a:focus-visible{outline:3px solid var(--destaque);outline-offset:2px}
+.filtros{display:flex;gap:.4rem;overflow-x:auto;padding-bottom:.2rem}
+.filtros button{border:1px solid var(--linha);background:#fff;color:var(--texto);padding:.5rem .95rem;border-radius:999px;font:inherit;cursor:pointer;white-space:nowrap}
+.filtros button[aria-pressed=true]{background:var(--texto);color:#fff;border-color:var(--texto)}
+main{max-width:1100px;margin:auto;padding:0 1.25rem 3rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:1.25rem}
+.produto{display:flex;flex-direction:column}
+.foto{aspect-ratio:4/5;border-radius:14px;overflow:hidden;background:linear-gradient(160deg,#EFD9E6,#D9C3E3);position:relative}
+.foto img{width:100%;height:100%;object-fit:cover;display:block}
+.esgotado .foto img{filter:grayscale(1);opacity:.55}
+.selo{position:absolute;top:.6rem;left:.6rem;background:var(--texto);color:#fff;font-size:.8rem;padding:.2rem .6rem;border-radius:999px}
+.produto h2{font-size:1.02rem;font-weight:600;margin-top:.7rem}
+.cat{color:var(--suave);font-size:.88rem}
+.preco{font-family:Fraunces,serif;font-weight:700;font-size:1.25rem;margin:.2rem 0 .7rem}
+.btn{margin-top:auto;display:block;text-align:center;text-decoration:none;background:var(--destaque);color:#fff;padding:.75rem 1rem;border-radius:10px;font-weight:600}
+.btn:hover{filter:brightness(.92)}
+.btn[aria-disabled=true]{background:var(--linha);color:var(--suave);pointer-events:none}
+.vazio{grid-column:1/-1;color:var(--suave);padding:2rem 0}
+footer{text-align:center;color:var(--suave);font-size:.85rem;padding:1.5rem 1rem 2.5rem;border-top:1px solid var(--linha)}
+.bloqueio{max-width:30rem;margin:20vh auto;padding:1.5rem;text-align:center}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+const app = document.getElementById('app');
+const cfg = await fetch('config.json').then(r => r.json());
+
+/* Proteção de licença: a loja só funciona nos endereços autorizados por ti */
+if (!cfg.dominios_autorizados.includes(location.hostname)) {
+  app.innerHTML = '<div class="bloqueio"><h1>Loja não autorizada</h1><p style="margin-top:.8rem;color:#7A6A82">Esta loja só pode ser usada no endereço licenciado pelo autor.</p></div>';
+  throw new Error('dominio-nao-autorizado');
+}
+
+function lerCSV(t){const l=[];let c='',r=[],q=false;for(let i=0;i<t.length;i++){const ch=t[i];if(q){if(ch==='"'){if(t[i+1]==='"'){c+='"';i++}else q=false}else c+=ch}else if(ch==='"')q=true;else if(ch===','){r.push(c);c=''}else if(ch==='\n'||ch==='\r'){if(ch==='\r'&&t[i+1]==='\n')i++;r.push(c);c='';l.push(r);r=[]}else c+=ch}if(c||r.length){r.push(c);l.push(r)}return l}
+
+async function carregarProdutos() {
+  /* 1) Planilha do Google (o cliente edita aqui, sem acesso ao código) */
+  if (cfg.planilha_csv) {
+    try {
+      const txt = await fetch(cfg.planilha_csv, { cache: 'no-store' }).then(r => { if (!r.ok) throw 0; return r.text(); });
+      const [cab, ...linhas] = lerCSV(txt);
+      const col = n => cab.findIndex(h => h.trim().toLowerCase() === n);
+      const i = { nome: col('nome'), preco: col('preco'), foto: col('foto'), cat: col('categoria'), esg: col('esgotado') };
+      return linhas.filter(l => (l[i.nome] || '').trim()).map(l => {
+        let foto = (l[i.foto] || '').trim();
+        if (foto && !/^(https?:)?\/\//.test(foto) && !foto.startsWith('fotos/')) foto = 'fotos/' + foto;
+        return {
+          nome: l[i.nome].trim(),
+          preco: Number(String(l[i.preco] || '0').replace(/\D/g, '')),
+          foto,
+          categoria: (l[i.cat] || 'Geral').trim(),
+          esgotado: /^(sim|s|yes|1|true)$/i.test((l[i.esg] || '').trim())
+        };
+      });
+    } catch (e) { /* se falhar, usa produtos.json */ }
+  }
+  /* 2) Plano B: ficheiro produtos.json */
+  return fetch('produtos.json').then(r => r.json());
+}
+const produtos = await carregarProdutos();
+const root = document.documentElement.style;
+for (const [k, v] of Object.entries(cfg.cores)) root.setProperty('--' + k, v);
+document.title = cfg.loja;
+
+const fmt = n => n.toLocaleString('pt-AO') + ' ' + cfg.moeda;
+const categorias = ['Todos', ...new Set(produtos.map(p => p.categoria))];
+let catAtual = 'Todos', busca = '';
+
+app.innerHTML = `
+  <header><h1></h1><p></p></header>
+  <div class="barra">
+    <input type="search" id="busca" placeholder="Procurar produto" aria-label="Procurar produto">
+    <div class="filtros" id="filtros"></div>
+  </div>
+  <main id="lista"></main>
+  <footer></footer>`;
+app.querySelector('h1').textContent = cfg.loja;
+app.querySelector('header p').textContent = cfg.slogan;
+app.querySelector('footer').textContent = cfg.credito;
+
+const filtros = document.getElementById('filtros');
+categorias.forEach(c => {
+  const b = document.createElement('button');
+  b.textContent = c;
+  b.onclick = () => { catAtual = c; desenhar(); };
+  filtros.appendChild(b);
+});
+document.getElementById('busca').oninput = e => { busca = e.target.value.toLowerCase(); desenhar(); };
+
+function link(p) {
+  const msg = cfg.mensagem.replace('{produto}', p.nome).replace('{preco}', fmt(p.preco));
+  return `https://wa.me/${cfg.whatsapp}?text=${encodeURIComponent(msg)}`;
+}
+
+function desenhar() {
+  [...filtros.children].forEach(b => b.setAttribute('aria-pressed', b.textContent === catAtual));
+  const lista = document.getElementById('lista');
+  lista.innerHTML = '';
+  const vistos = produtos.filter(p =>
+    (catAtual === 'Todos' || p.categoria === catAtual) && p.nome.toLowerCase().includes(busca));
+  if (!vistos.length) { lista.innerHTML = '<p class="vazio">Nenhum produto encontrado.</p>'; return; }
+  vistos.forEach(p => {
+    const el = document.createElement('article');
+    el.className = 'produto' + (p.esgotado ? ' esgotado' : '');
+    el.innerHTML = `
+      <div class="foto"><img loading="lazy" alt=""><span class="selo" hidden>Esgotado</span></div>
+      <h2></h2><span class="cat"></span><div class="preco"></div>
+      <a class="btn" target="_blank" rel="noopener"></a>`;
+    const img = el.querySelector('img');
+    img.src = p.foto; img.alt = p.nome;
+    img.onerror = () => img.remove();
+    if (p.esgotado) el.querySelector('.selo').hidden = false;
+    el.querySelector('h2').textContent = p.nome;
+    el.querySelector('.cat').textContent = p.categoria;
+    el.querySelector('.preco').textContent = fmt(p.preco);
+    const a = el.querySelector('.btn');
+    if (p.esgotado) { a.textContent = 'Esgotado'; a.setAttribute('aria-disabled', 'true'); }
+    else { a.textContent = 'Encomendar no WhatsApp'; a.href = link(p); }
+    lista.appendChild(el);
+  });
+}
+desenhar();
+</script>
+</body>
+</html>
